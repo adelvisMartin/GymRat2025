@@ -1,0 +1,162 @@
+:root {
+  --rojo-primario: #e1160d;
+  --rojo-oscuro: #a70a15;
+  --fondo-oscuro: #0f0f0f;
+  --fondo-card: #1a1a1a;
+  --texto-claro: #e4e2e2;
+  --borde: #ffffff29;
+}
+
+body {
+  font-family: "Poppins", sans-serif;
+  background-color: var(--fondo-oscuro);
+  color: var(--texto-claro);
+  padding-top: 70px;
+}
+
+/* NAVBAR ESTILIZADO */
+.navbar {
+  background-color: #040404 !important;
+  border-bottom: 1px solid var(--borde);
+  transition: all 0.3s ease;
+}
+
+.navbar.scrolled {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.navbar-brand.logo {
+  color: var(--rojo-primario) !important;
+  font-weight: 800;
+  font-size: 1.8rem;
+}
+
+.nav-link {
+  position: relative;
+  padding: 0.5rem 1rem;
+  font-weight: 500;
+}
+
+.nav-link::after {
+  content: "";
+  position: absolute;
+  width: 0;
+  height: 2px;
+  bottom: 0;
+  left: 0;
+  background-color: var(--rojo-primario);
+  transition: width 0.3s ease;
+}
+
+.nav-link:hover::after,
+.nav-link.active::after {
+  width: 100%;
+}
+
+/* FORMULARIO MEJORADO */
+.registration-container {
+  max-width: 650px;
+  margin: 2rem auto;
+  padding: 2.5rem;
+  background-color: var(--fondo-card);
+  border-radius: 12px;
+  border: 1px solid var(--borde);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.registration-title {
+  color: var(--rojo-primario);
+  text-transform: uppercase;
+  font-weight: 800;
+  margin-bottom: 2rem;
+  text-align: center;
+  position: relative;
+  padding-bottom: 0.5rem;
+}
+
+.registration-title::after {
+  content: "";
+  position: absolute;
+  width: 80px;
+  height: 3px;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: var(--rojo-primario);
+}
+
+.form-control {
+  background-color: #2d2d2d;
+  border: 1px solid var(--borde);
+  color: var(--texto-claro);
+  margin-bottom: 1.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.form-control:focus {
+  background-color: #2d2d2d;
+  color: var(--texto-claro);
+  border-color: var(--rojo-primario);
+  box-shadow: 0 0 0 0.25rem rgba(225, 22, 13, 0.25);
+}
+
+.form-label {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.btn-register {
+  background-color: var(--rojo-primario);
+  color: white;
+  border: none;
+  padding: 1rem 2rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  width: 100%;
+  transition: all 0.3s;
+  border-radius: 8px;
+  letter-spacing: 1px;
+}
+
+.btn-register:hover {
+  background-color: var(--rojo-oscuro);
+  transform: translateY(-3px);
+  box-shadow: 0 6px 12px rgba(225, 22, 13, 0.3);
+}
+
+/* EFECTO DE CARGA AL ENVIAR */
+.btn-register.sending::after {
+  content: "";
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  margin-left: 10px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: white;
+  animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* MENSAJES DE VALIDACIÓN */
+.invalid-feedback {
+  color: #ff6b6b;
+  font-size: 0.85rem;
+  margin-top: -0.5rem;
+  margin-bottom: 1rem;
+}
+
+.was-validated .form-control:invalid {
+  border-color: #ff6b6b;
+}
+
+.was-validated .form-control:valid {
+  border-color: #28a745;
+}
