@@ -1,0 +1,110 @@
+name: FitAI Android CI
+
+on:
+  push:
+    branches:
+      - feat/fitai-pro-2.7-opengym-foundation
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fitai-android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-emulator-smoke:
+    name: Build, unit, lint and emulator smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android API 36 build tools
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Set up Gradle 9.1.0
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.1.0'
+
+      - name: Unpack FitAI Pro 2.7 source
+        shell: bash
+        run: |
+          rm -rf buildsrc
+          mkdir -p buildsrc
+          unzip -q source/FitAI-Pro-2.7-Integrated-Android-Source.zip -d buildsrc
+          test -f buildsrc/FitAI-Pro-2.7-Integrated-Android-Source/settings.gradle.kts
+
+      - name: Unit tests, lint and debug APK
+        working-directory: buildsrc/FitAI-Pro-2.7-Integrated-Android-Source
+        shell: bash
+        run: |
+          gradle --version
+          gradle --stacktrace testProDebugUnitTest lintProDebug assembleProDebug
+
+      - name: Record APK hash
+        working-directory: buildsrc/FitAI-Pro-2.7-Integrated-Android-Source
+        shell: bash
+        run: |
+          APK="$(find app/build/outputs/apk/pro/debug -type f -name '*.apk' | head -n 1)"
+          test -n "$APK"
+          sha256sum "$APK" | tee FITAI_APK_SHA256.txt
+
+      - name: Upload APK before emulator gate
+        uses: actions/upload-artifact@v4
+        with:
+          name: FitAI-Pro-2.7-QA-APK
+          path: |
+            buildsrc/FitAI-Pro-2.7-Integrated-Android-Source/app/build/outputs/apk/pro/debug/*.apk
+            buildsrc/FitAI-Pro-2.7-Integrated-Android-Source/FITAI_APK_SHA256.txt
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Emulator instrumentation + launch smoke
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: |
+            cd buildsrc/FitAI-Pro-2.7-Integrated-Android-Source
+            gradle --stacktrace connectedProDebugAndroidTest assembleProDebug
+            APK="$(find app/build/outputs/apk/pro/debug -type f -name '*.apk' | head -n 1)"
+            adb install -r "$APK"
+            adb shell am force-stop com.adelvis.fitai.qa27.debug || true
+            adb shell am start -W -n com.adelvis.fitai.qa27.debug/com.example.fitai.MainActivity
+            sleep 3
+            adb shell pidof com.adelvis.fitai.qa27.debug
+
+      - name: Upload Android test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FitAI-Pro-2.7-QA-Reports
+          path: |
+            buildsrc/FitAI-Pro-2.7-Integrated-Android-Source/app/build/reports/
+            buildsrc/FitAI-Pro-2.7-Integrated-Android-Source/app/build/outputs/androidTest-results/
+          if-no-files-found: ignore
+          retention-days: 14
