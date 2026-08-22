@@ -46,36 +46,54 @@ jobs:
         with:
           gradle-version: '9.1.0'
 
-      - name: Unpack FitAI Pro 2.7 source
+      - name: Rebuild FitAI Pro 2.7 source from chunks
         shell: bash
         run: |
+          set -euo pipefail
           rm -rf buildsrc
           mkdir -p buildsrc
-          unzip -q source/FitAI-Pro-2.7-Integrated-Android-Source.zip -d buildsrc
-          test -f buildsrc/FitAI-Pro-2.7-Integrated-Android-Source/settings.gradle.kts
+          test -n "$(find source/chunks -maxdepth 1 -type f -name 'fitai27.tar.xz.b64.*' -print -quit)"
+          cat $(find source/chunks -maxdepth 1 -type f -name 'fitai27.tar.xz.b64.*' | sort) | base64 --decode > /tmp/fitai27.tar.xz
+          xz -t /tmp/fitai27.tar.xz
+          tar -xJf /tmp/fitai27.tar.xz -C buildsrc
+          SETTINGS="$(find buildsrc -type f -name settings.gradle.kts -print -quit)"
+          test -n "$SETTINGS"
+          PROJECT_DIR="$(dirname "$SETTINGS")"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Recovered Android project at: $PROJECT_DIR"
+          find "$PROJECT_DIR" -maxdepth 2 -type f | sort | head -n 80
 
       - name: Unit tests, lint and debug APK
-        working-directory: buildsrc/FitAI-Pro-2.7-Integrated-Android-Source
         shell: bash
         run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
           gradle --version
           gradle --stacktrace testProDebugUnitTest lintProDebug assembleProDebug
 
-      - name: Record APK hash
-        working-directory: buildsrc/FitAI-Pro-2.7-Integrated-Android-Source
+      - name: Record APK metadata and hash
         shell: bash
         run: |
-          APK="$(find app/build/outputs/apk/pro/debug -type f -name '*.apk' | head -n 1)"
+          set -euo pipefail
+          cd "$PROJECT_DIR"
+          APK="$(find app/build/outputs/apk/pro/debug -type f -name '*.apk' -print -quit)"
           test -n "$APK"
+          echo "APK_PATH=$PROJECT_DIR/$APK" >> "$GITHUB_ENV"
           sha256sum "$APK" | tee FITAI_APK_SHA256.txt
+          AAPT="${ANDROID_HOME}/build-tools/36.0.0/aapt"
+          PKG="$($AAPT dump badging "$APK" | sed -n "s/package: name='\([^']*\)'.*/\1/p" | head -n1)"
+          test -n "$PKG"
+          echo "APP_PACKAGE=$PKG" >> "$GITHUB_ENV"
+          echo "Detected package: $PKG"
+          $AAPT dump badging "$APK" | sed -n '1,8p'
 
       - name: Upload APK before emulator gate
         uses: actions/upload-artifact@v4
         with:
           name: FitAI-Pro-2.7-QA-APK
           path: |
-            buildsrc/FitAI-Pro-2.7-Integrated-Android-Source/app/build/outputs/apk/pro/debug/*.apk
-            buildsrc/FitAI-Pro-2.7-Integrated-Android-Source/FITAI_APK_SHA256.txt
+            ${{ env.PROJECT_DIR }}/app/build/outputs/apk/pro/debug/*.apk
+            ${{ env.PROJECT_DIR }}/FITAI_APK_SHA256.txt
           if-no-files-found: error
           retention-days: 14
 
@@ -89,14 +107,17 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
-            cd buildsrc/FitAI-Pro-2.7-Integrated-Android-Source
+            set -euo pipefail
+            cd "$PROJECT_DIR"
             gradle --stacktrace connectedProDebugAndroidTest assembleProDebug
-            APK="$(find app/build/outputs/apk/pro/debug -type f -name '*.apk' | head -n 1)"
+            APK="$(find app/build/outputs/apk/pro/debug -type f -name '*.apk' -print -quit)"
+            AAPT="${ANDROID_HOME}/build-tools/36.0.0/aapt"
+            PKG="$($AAPT dump badging "$APK" | sed -n "s/package: name='\([^']*\)'.*/\1/p" | head -n1)"
             adb install -r "$APK"
-            adb shell am force-stop com.adelvis.fitai.qa27.debug || true
-            adb shell am start -W -n com.adelvis.fitai.qa27.debug/com.example.fitai.MainActivity
-            sleep 3
-            adb shell pidof com.adelvis.fitai.qa27.debug
+            adb shell am force-stop "$PKG" || true
+            adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1
+            sleep 4
+            adb shell pidof "$PKG"
 
       - name: Upload Android test reports
         if: always()
@@ -104,7 +125,7 @@ jobs:
         with:
           name: FitAI-Pro-2.7-QA-Reports
           path: |
-            buildsrc/FitAI-Pro-2.7-Integrated-Android-Source/app/build/reports/
-            buildsrc/FitAI-Pro-2.7-Integrated-Android-Source/app/build/outputs/androidTest-results/
+            ${{ env.PROJECT_DIR }}/app/build/reports/
+            ${{ env.PROJECT_DIR }}/app/build/outputs/androidTest-results/
           if-no-files-found: ignore
           retention-days: 14
