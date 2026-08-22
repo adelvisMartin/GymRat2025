@@ -1,0 +1,21 @@
+name: FitAI CI Probe
+
+on:
+  push:
+    branches:
+      - feat/fitai-pro-2.7-opengym-foundation
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Runner probe
+        run: |
+          echo "FitAI Pro 2.7 CI runner available"
+          java -version
+          uname -a
