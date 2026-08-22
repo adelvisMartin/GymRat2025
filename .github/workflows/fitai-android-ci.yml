@@ -46,22 +46,22 @@ jobs:
         with:
           gradle-version: '9.1.0'
 
-      - name: Rebuild FitAI Pro 2.7 source from chunks
+      - name: Recover FitAI Pro 2.7 source
         shell: bash
         run: |
           set -euo pipefail
           rm -rf buildsrc
           mkdir -p buildsrc
-          test -n "$(find source/chunks -maxdepth 1 -type f -name 'fitai27.tar.xz.b64.*' -print -quit)"
-          cat $(find source/chunks -maxdepth 1 -type f -name 'fitai27.tar.xz.b64.*' | sort) | base64 --decode > /tmp/fitai27.tar.xz
+          mapfile -t PARTS < <(find source/chunks -maxdepth 1 -type f -name 'fitai27.tar.xz.b64.*' | sort)
+          test ${#PARTS[@]} -gt 0
+          cat "${PARTS[@]}" | base64 --decode > /tmp/fitai27.tar.xz
           xz -t /tmp/fitai27.tar.xz
           tar -xJf /tmp/fitai27.tar.xz -C buildsrc
           SETTINGS="$(find buildsrc -type f -name settings.gradle.kts -print -quit)"
           test -n "$SETTINGS"
           PROJECT_DIR="$(dirname "$SETTINGS")"
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Recovered Android project at: $PROJECT_DIR"
-          find "$PROJECT_DIR" -maxdepth 2 -type f | sort | head -n 80
+          echo "Recovered Android project: $PROJECT_DIR"
 
       - name: Unit tests, lint and debug APK
         shell: bash
@@ -78,14 +78,12 @@ jobs:
           cd "$PROJECT_DIR"
           APK="$(find app/build/outputs/apk/pro/debug -type f -name '*.apk' -print -quit)"
           test -n "$APK"
-          echo "APK_PATH=$PROJECT_DIR/$APK" >> "$GITHUB_ENV"
           sha256sum "$APK" | tee FITAI_APK_SHA256.txt
           AAPT="${ANDROID_HOME}/build-tools/36.0.0/aapt"
           PKG="$($AAPT dump badging "$APK" | sed -n "s/package: name='\([^']*\)'.*/\1/p" | head -n1)"
           test -n "$PKG"
           echo "APP_PACKAGE=$PKG" >> "$GITHUB_ENV"
           echo "Detected package: $PKG"
-          $AAPT dump badging "$APK" | sed -n '1,8p'
 
       - name: Upload APK before emulator gate
         uses: actions/upload-artifact@v4
