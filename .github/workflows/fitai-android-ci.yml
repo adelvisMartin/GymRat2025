@@ -20,7 +20,7 @@ jobs:
   build-and-emulator-smoke:
     name: Build, unit, lint and emulator smoke
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 55
 
     steps:
       - name: Checkout
@@ -47,53 +47,41 @@ jobs:
         with:
           gradle-version: '9.1.0'
 
-      - name: Recover canonical FitAI Pro 2.7 source
+      - name: Recover canonical FitAI Pro 2.8 source
         shell: bash
         run: |
           set -euo pipefail
           rm -rf buildsrc
           mkdir -p buildsrc
-          ZIP="source/FitAI-Pro-2.7-Integrated-Android-Source.zip"
-          RECOVERED=0
 
-          if [[ -f "$ZIP" ]]; then
-            echo "Canonical ZIP size: $(stat -c%s "$ZIP") bytes"
-            sha256sum "$ZIP" | tee /tmp/FITAI_SOURCE_ZIP_SHA256.txt
-            if unzip -tq "$ZIP" >/tmp/fitai_zip_test.log 2>&1; then
-              echo "Canonical ZIP integrity: PASS"
-              unzip -q "$ZIP" -d buildsrc
-              RECOVERED=1
-            else
-              echo "Canonical ZIP integrity: FAIL"
-              tail -n 30 /tmp/fitai_zip_test.log || true
-            fi
-          fi
+          ZIP=/tmp/FitAI-Pro-2.8-ProductionCandidate-Android-Source.zip
+          EXPECTED_SHA=1dee386bbc3e1a5204fd81e2f592b926ff81c555b2fcbf135bd3cd6c68953555
 
-          if [[ "$RECOVERED" -eq 0 ]]; then
-            echo "Trying chunk fallback..."
-            mapfile -t PARTS < <(find source/chunks -maxdepth 1 -type f -name 'fitai27.tar.xz.b64.*' | sort)
-            echo "Chunk count: ${#PARTS[@]}"
-            if [[ ${#PARTS[@]} -gt 0 ]]; then
-              cat "${PARTS[@]}" | base64 --decode > /tmp/fitai27.tar.xz
-              echo "Rebuilt XZ size: $(stat -c%s /tmp/fitai27.tar.xz) bytes"
-              if xz -t /tmp/fitai27.tar.xz; then
-                tar -xJf /tmp/fitai27.tar.xz -C buildsrc
-                RECOVERED=1
-              fi
-            fi
-          fi
+          PARTS=(source/fitai28/chunks/fitai28.zip.b64.{00..12})
+          PARTS+=(source/fitai28/chunks/fitai28.zip.b64.13a)
+          PARTS+=(source/fitai28/chunks/fitai28.zip.b64.13b)
 
-          if [[ "$RECOVERED" -ne 1 ]]; then
-            echo "ERROR: no complete canonical source transport is available in this commit." >&2
-            exit 70
-          fi
+          for part in "${PARTS[@]}"; do
+            test -s "$part" || { echo "Missing source transport part: $part" >&2; exit 70; }
+          done
+
+          cat "${PARTS[@]}" | base64 --decode > "$ZIP"
+          ACTUAL_SHA="$(sha256sum "$ZIP" | awk '{print $1}')"
+          echo "$ACTUAL_SHA  $ZIP" | tee /tmp/FITAI_SOURCE_ZIP_SHA256.txt
+          test "$ACTUAL_SHA" = "$EXPECTED_SHA" || {
+            echo "Source ZIP SHA mismatch. Expected $EXPECTED_SHA, got $ACTUAL_SHA" >&2
+            exit 71
+          }
+
+          unzip -tq "$ZIP" | tee /tmp/fitai_zip_test.log
+          unzip -q "$ZIP" -d buildsrc
 
           SETTINGS="$(find buildsrc -type f \( -name settings.gradle.kts -o -name settings.gradle \) -print -quit)"
           test -n "$SETTINGS"
           PROJECT_DIR="$(dirname "$SETTINGS")"
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
           echo "Recovered Android project: $PROJECT_DIR"
-          find "$PROJECT_DIR" -maxdepth 2 -type f | sort | head -n 120
+          grep -n "versionName\|versionCode\|applicationId" "$PROJECT_DIR/app/build.gradle" || true
 
       - name: Select Gradle runner
         shell: bash
@@ -150,7 +138,7 @@ jobs:
       - name: Upload APK before emulator gate
         uses: actions/upload-artifact@v4
         with:
-          name: FitAI-Pro-2.7-APK
+          name: FitAI-Pro-2.8-APK
           path: |
             ${{ env.PROJECT_DIR }}/app/build/outputs/apk/**/*.apk
             ${{ env.PROJECT_DIR }}/FITAI_APK_SHA256.txt
@@ -185,7 +173,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: FitAI-Pro-2.7-Reports
+          name: FitAI-Pro-2.8-Reports
           path: |
             ${{ env.PROJECT_DIR }}/app/build/reports/
             ${{ env.PROJECT_DIR }}/app/build/outputs/androidTest-results/
