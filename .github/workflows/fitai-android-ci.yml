@@ -20,14 +20,14 @@ jobs:
   build-and-emulator-smoke:
     name: Build, unit, lint and emulator smoke
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 55
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -38,62 +38,112 @@ jobs:
       - name: Install Android API 36 build tools
         shell: bash
         run: |
+          set -euo pipefail
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Set up Gradle 9.1.0
+      - name: Set up fallback Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.1.0'
 
-      - name: Recover FitAI Pro 2.7 source
+      - name: Recover canonical FitAI Pro 2.8 source
         shell: bash
         run: |
           set -euo pipefail
           rm -rf buildsrc
           mkdir -p buildsrc
-          mapfile -t PARTS < <(find source/chunks -maxdepth 1 -type f -name 'fitai27.tar.xz.b64.*' | sort)
-          test ${#PARTS[@]} -gt 0
-          cat "${PARTS[@]}" | base64 --decode > /tmp/fitai27.tar.xz
-          xz -t /tmp/fitai27.tar.xz
-          tar -xJf /tmp/fitai27.tar.xz -C buildsrc
-          SETTINGS="$(find buildsrc -type f -name settings.gradle.kts -print -quit)"
+
+          ZIP=/tmp/FitAI-Pro-2.8-ProductionCandidate-Android-Source.zip
+          EXPECTED_SHA=1dee386bbc3e1a5204fd81e2f592b926ff81c555b2fcbf135bd3cd6c68953555
+
+          PARTS=(source/fitai28/chunks/fitai28.zip.b64.{00..12})
+          PARTS+=(source/fitai28/chunks/fitai28.zip.b64.13a)
+          PARTS+=(source/fitai28/chunks/fitai28.zip.b64.13b)
+
+          for part in "${PARTS[@]}"; do
+            test -s "$part" || { echo "Missing source transport part: $part" >&2; exit 70; }
+          done
+
+          cat "${PARTS[@]}" | base64 --decode > "$ZIP"
+          ACTUAL_SHA="$(sha256sum "$ZIP" | awk '{print $1}')"
+          echo "$ACTUAL_SHA  $ZIP" | tee /tmp/FITAI_SOURCE_ZIP_SHA256.txt
+          test "$ACTUAL_SHA" = "$EXPECTED_SHA" || {
+            echo "Source ZIP SHA mismatch. Expected $EXPECTED_SHA, got $ACTUAL_SHA" >&2
+            exit 71
+          }
+
+          unzip -tq "$ZIP" | tee /tmp/fitai_zip_test.log
+          unzip -q "$ZIP" -d buildsrc
+
+          SETTINGS="$(find buildsrc -type f \( -name settings.gradle.kts -o -name settings.gradle \) -print -quit)"
           test -n "$SETTINGS"
           PROJECT_DIR="$(dirname "$SETTINGS")"
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
           echo "Recovered Android project: $PROJECT_DIR"
+          grep -n "versionName\|versionCode\|applicationId" "$PROJECT_DIR/app/build.gradle" || true
 
-      - name: Unit tests, lint and debug APK
+      - name: Select Gradle runner
         shell: bash
         run: |
           set -euo pipefail
           cd "$PROJECT_DIR"
-          gradle --version
-          gradle --stacktrace testProDebugUnitTest lintProDebug assembleProDebug
+          if [[ -f gradlew ]]; then
+            chmod +x gradlew
+            echo "GRADLE_CMD=./gradlew" >> "$GITHUB_ENV"
+            ./gradlew --version
+          else
+            echo "GRADLE_CMD=gradle" >> "$GITHUB_ENV"
+            gradle --version
+          fi
+
+      - name: Unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
+          "$GRADLE_CMD" --stacktrace --no-daemon testProDebugUnitTest
+
+      - name: Android lint
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
+          "$GRADLE_CMD" --stacktrace --no-daemon lintProDebug
+
+      - name: Assemble debug APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
+          "$GRADLE_CMD" --stacktrace --no-daemon assembleProDebug
 
       - name: Record APK metadata and hash
         shell: bash
         run: |
           set -euo pipefail
           cd "$PROJECT_DIR"
-          APK="$(find app/build/outputs/apk/pro/debug -type f -name '*.apk' -print -quit)"
+          APK="$(find app/build/outputs/apk -type f -name '*pro*debug*.apk' -print -quit)"
+          if [[ -z "$APK" ]]; then APK="$(find app/build/outputs/apk -type f -name '*.apk' -print -quit)"; fi
           test -n "$APK"
+          echo "APK_RELATIVE=$APK" >> "$GITHUB_ENV"
           sha256sum "$APK" | tee FITAI_APK_SHA256.txt
           AAPT="${ANDROID_HOME}/build-tools/36.0.0/aapt"
           PKG="$($AAPT dump badging "$APK" | sed -n "s/package: name='\([^']*\)'.*/\1/p" | head -n1)"
           test -n "$PKG"
           echo "APP_PACKAGE=$PKG" >> "$GITHUB_ENV"
           echo "Detected package: $PKG"
+          $AAPT dump badging "$APK" | sed -n '1,12p'
 
       - name: Upload APK before emulator gate
         uses: actions/upload-artifact@v4
         with:
-          name: FitAI-Pro-2.7-QA-APK
+          name: FitAI-Pro-2.8-APK
           path: |
-            ${{ env.PROJECT_DIR }}/app/build/outputs/apk/pro/debug/*.apk
+            ${{ env.PROJECT_DIR }}/app/build/outputs/apk/**/*.apk
             ${{ env.PROJECT_DIR }}/FITAI_APK_SHA256.txt
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30
 
       - name: Emulator instrumentation + launch smoke
         uses: reactivecircus/android-emulator-runner@v2
@@ -107,8 +157,10 @@ jobs:
           script: |
             set -euo pipefail
             cd "$PROJECT_DIR"
-            gradle --stacktrace connectedProDebugAndroidTest assembleProDebug
-            APK="$(find app/build/outputs/apk/pro/debug -type f -name '*.apk' -print -quit)"
+            "$GRADLE_CMD" --stacktrace --no-daemon connectedProDebugAndroidTest
+            APK="$(find app/build/outputs/apk -type f -name '*pro*debug*.apk' -print -quit)"
+            if [[ -z "$APK" ]]; then APK="$(find app/build/outputs/apk -type f -name '*.apk' -print -quit)"; fi
+            test -n "$APK"
             AAPT="${ANDROID_HOME}/build-tools/36.0.0/aapt"
             PKG="$($AAPT dump badging "$APK" | sed -n "s/package: name='\([^']*\)'.*/\1/p" | head -n1)"
             adb install -r "$APK"
@@ -121,9 +173,11 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: FitAI-Pro-2.7-QA-Reports
+          name: FitAI-Pro-2.8-Reports
           path: |
             ${{ env.PROJECT_DIR }}/app/build/reports/
             ${{ env.PROJECT_DIR }}/app/build/outputs/androidTest-results/
+            /tmp/FITAI_SOURCE_ZIP_SHA256.txt
+            /tmp/fitai_zip_test.log
           if-no-files-found: ignore
-          retention-days: 14
+          retention-days: 30
