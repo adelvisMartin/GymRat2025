@@ -41,47 +41,49 @@ Every external skill/plugin must be checked for provenance, maintenance, license
 
 ## Senior agent council
 
+The high-level council below is mirrored by dedicated operational role files under `.agents/agents/`. For nontrivial work, the Orchestrator must route the task to at least one implementation role and one independent review role.
+
 ### 1. Orchestrator / Principal Software Engineer
-Owns scope, architecture, branch hygiene, dependency boundaries, release evidence, refactor sequencing and conflict resolution between specialists.
+Owns scope, architecture, branch hygiene, dependency boundaries, release evidence, refactor sequencing and conflict resolution between specialists. Operational file: `.agents/agents/orchestrator.md`.
 
 ### 2. Product / Requirements Agent
 Translates product goals into acceptance criteria, separates current local-only scope from future cloud scope, prevents accidental feature regressions and keeps user-facing behavior coherent.
 
 ### 3. TypeScript / Next.js Platform Agent
-Owns strict TypeScript, Next.js static export constraints, React architecture, client-state boundaries, web performance, build reproducibility and future API adapter contracts.
+Owns strict TypeScript, Next.js static export constraints, React architecture, client-state boundaries, web performance, build reproducibility and future API adapter contracts. Operational file: `.agents/agents/architecture-platform.md`.
 
 ### 4. Capacitor / Android Bridge Agent
-Owns Capacitor 8, Android packaging, Gradle, permissions, WebView/native boundaries, ML Kit barcode integration, pedometer integration and Kotlin custom plugins when web APIs are insufficient.
+Owns Capacitor 8, Android packaging, Gradle, permissions, WebView/native boundaries, ML Kit barcode integration, pedometer integration and Kotlin custom plugins when web APIs are insufficient. Operational file: `.agents/agents/architecture-platform.md`.
 
 ### 5. Training Engine Agent
-Owns routines, workout state machine, load progression, RIR/RPE, 1RM, PR detection, timed sets, supersets, cardio metrics, plate math, deterministic generation and regression tests.
+Owns routines, workout state machine, load progression, RIR/RPE, 1RM, PR detection, timed sets, supersets, cardio metrics, plate math, deterministic generation and regression tests. Operational file: `.agents/agents/training-domain.md`.
 
 ### 6. Nutrition & Activity Agent
-Owns recipes, meal totals, barcode lookup, Open Food Facts mapping, units, step tracking and privacy-safe wellness data handling. It must not fabricate medical claims.
+Owns recipes, meal totals, barcode lookup, Open Food Facts mapping, units, step tracking and privacy-safe wellness data handling. It must not fabricate medical claims. Operational file: `.agents/agents/nutrition-activity.md`.
 
 ### 7. Coach Center / CRM Agent
 Owns local client isolation, measurements, notes, coach workflows and future sync-ready entity boundaries without leaking one client’s data into another.
 
 ### 8. Local-First / Data Integrity Agent
-Owns encrypted vault design, schema versioning, import/export, backup validation, corruption handling, migration strategy, atomic persistence and eventual remote repository compatibility.
+Owns encrypted vault design, schema versioning, import/export, backup validation, corruption handling, migration strategy, atomic persistence and eventual remote repository compatibility. Operational file: `.agents/agents/security-data.md`.
 
 ### 9. Security & Privacy Agent
-Owns threat modeling, secure storage, permission minimization, input validation, dependency review, CSP/network policy, logging hygiene, backup safety, supply-chain checks and OWASP-aligned review.
+Owns threat modeling, secure storage, permission minimization, input validation, dependency review, CSP/network policy, logging hygiene, backup safety, supply-chain checks and OWASP-aligned review. Operational file: `.agents/agents/security-data.md`.
 
 ### 10. Product UI / UX Agent
-Owns hierarchy, responsive behavior, design tokens, empty/loading/error states, touch ergonomics, motion restraint, information density and coherence across PWA and Android.
+Owns hierarchy, responsive behavior, design tokens, empty/loading/error states, touch ergonomics, motion restraint, information density and coherence across PWA and Android. Operational file: `.agents/agents/ux-accessibility.md`.
 
 ### 11. Accessibility Agent
-Owns WCAG-oriented audits, keyboard paths, screen-reader semantics, focus, reduced motion, contrast, font scaling and meaningful labels.
+Owns WCAG-oriented audits, keyboard paths, screen-reader semantics, focus, reduced motion, contrast, font scaling and meaningful labels. Operational file: `.agents/agents/ux-accessibility.md`.
 
 ### 12. Performance Agent
-Owns bundle analysis, Web Vitals, startup, rendering cost, service-worker caching, network waterfalls, Android WebView startup and memory/battery regressions.
+Owns bundle analysis, Web Vitals, startup, rendering cost, service-worker caching, network waterfalls, Android WebView startup and memory/battery regressions. Operational file: `.agents/agents/performance-supply-chain.md`.
 
 ### 13. QA / E2E Agent
-Owns unit, contract, browser E2E, PWA install/offline checks, Android build, emulator launch, physical-device flows, permissions, upgrade/restore and regression evidence. Only this role may recommend `PRODUCTION GO`.
+Owns unit, contract, browser E2E, PWA install/offline checks, Android build, emulator launch, physical-device flows, permissions, upgrade/restore and regression evidence. Only this role may recommend `PRODUCTION GO`. Operational file: `.agents/agents/qa-release.md`.
 
 ### 14. Release / Supply Chain Agent
-Owns dependency pinning, lockfiles, SBOM/dependency review, signing, reproducible build inputs, artifact hashes, release notes and provenance.
+Owns dependency pinning, lockfiles, SBOM/dependency review, signing, reproducible build inputs, artifact hashes, release notes and provenance. Operational file: `.agents/agents/performance-supply-chain.md`.
 
 ### 15. Documentation Agent
 Owns architecture records, migrations, known limitations, runbooks, QA evidence, third-party acknowledgements and developer onboarding.
@@ -98,6 +100,20 @@ Repository-local skills under `.agents/skills/` are binding execution guides whe
 - `fitai-pwa-capacitor`
 - `fitai-native-bridge`
 - `fitai-e2e-release`
+- `fitai-architecture`
+- `fitai-accessibility`
+- `fitai-performance`
+- `fitai-nutrition-activity`
+- `fitai-supply-chain`
+
+### Mandatory skill combinations
+
+- **Training feature:** `fitai-architecture` → `fitai-training-engine` → `fitai-product-ui` → `fitai-accessibility` → `fitai-android-qa`/`fitai-e2e-release`.
+- **Nutrition/activity feature:** `fitai-architecture` → `fitai-nutrition-activity` → `fitai-security-privacy` → `fitai-product-ui` → QA.
+- **Persistence/import/migration:** `fitai-local-first` + `fitai-security-privacy` + `fitai-architecture` + `fitai-e2e-release`.
+- **Native Android capability:** `fitai-native-bridge` + `fitai-pwa-capacitor` + `fitai-security-privacy` + Android QA.
+- **UI redesign:** `fitai-product-ui` + `fitai-accessibility` + `fitai-performance`, followed by browser E2E.
+- **Dependency/release change:** `fitai-supply-chain` + `fitai-performance` + `fitai-e2e-release`.
 
 External skills installed through `scripts/install-agent-skills.ps1` are advisory lenses:
 
@@ -115,17 +131,18 @@ Do not run multiple design skills as competing redesign directives in the same p
 
 1. Inspect current code and tests.
 2. Write acceptance criteria and identify data/security/accessibility risks.
-3. Add or update deterministic tests first where practical.
-4. Implement the smallest complete vertical slice.
-5. Run unit/contract tests.
-6. Run strict type/static checks.
-7. Build the static PWA.
-8. Run Playwright mobile + desktop interaction E2E.
-9. Build the Capacitor Android APK.
-10. Run Android emulator launch/permission smoke.
-11. Refactor only after behavior is green.
-12. Update docs and report every gate separately.
-13. Before release, perform physical-device QA and backup/restore/upgrade tests.
+3. Route work through the matching `.agents/agents/*.md` role(s) and binding skills.
+4. Add or update deterministic tests first where practical.
+5. Implement the smallest complete vertical slice.
+6. Run unit/contract tests.
+7. Run strict type/static checks.
+8. Build the static PWA.
+9. Run Playwright mobile + desktop interaction E2E.
+10. Build the Capacitor Android APK.
+11. Run Android emulator launch/permission smoke.
+12. Refactor only after behavior is green.
+13. Update docs and report every gate separately.
+14. Before release, perform physical-device QA and backup/restore/upgrade tests.
 
 ## Release gate vocabulary
 
