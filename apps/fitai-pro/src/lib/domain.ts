@@ -18,7 +18,7 @@ export function id(prefix: string): string {
 }
 
 export function estimatedOneRepMax(loadKg: number, reps: number): number {
-  if (!Number.isFinite(loadKg) || !Number.isFinite(reps) || loadKg <= 0 || reps <= 0) return 0;
+  if (!Number.isFinite(loadKg) || !Number.isFinite(reps) || loadKg <= 0 || reps <= 0 || reps > 12) return 0;
   if (reps === 1) return round(loadKg, 1);
   return round(loadKg * (1 + reps / 30), 1);
 }
@@ -116,22 +116,35 @@ export function detectPersonalRecords(session: WorkoutSession, previous: Persona
 
 export function buildRoutine(goal: Goal, daysPerWeek: number, exercises: Exercise[]): WorkoutTemplate[] {
   const days = clamp(Math.round(daysPerWeek), 2, 6);
-  const strength = exercises.filter((e) => e.category === 'strength');
-  const push = strength.filter((e) => e.primaryMuscles.some((m) => ['chest', 'shoulders', 'triceps'].includes(m)));
-  const pull = strength.filter((e) => e.primaryMuscles.some((m) => ['back', 'biceps'].includes(m)));
-  const legs = strength.filter((e) => e.primaryMuscles.some((m) => ['quads', 'hamstrings', 'glutes', 'calves'].includes(m)));
-  const pools = [push, pull, legs, strength].map((p) => (p.length ? p : strength));
-  const repRange = goal === 'strength' ? [3, 6] : goal === 'hypertrophy' ? [6, 12] : [8, 15];
-  const targetRir = goal === 'strength' ? 2 : 2;
-  const targetSets = goal === 'strength' ? 4 : 3;
-  const names = days <= 3 ? ['Full Body A', 'Full Body B', 'Full Body C'] : ['Push', 'Pull', 'Legs', 'Upper', 'Lower', 'Full Body'];
+  const strength = exercises.filter((exercise) => exercise.category === 'strength');
+  const push = strength.filter((exercise) => exercise.primaryMuscles.some((muscle) => ['chest', 'shoulders', 'triceps'].includes(muscle)));
+  const pull = strength.filter((exercise) => exercise.primaryMuscles.some((muscle) => ['back', 'biceps', 'forearms'].includes(muscle)));
+  const lower = strength.filter((exercise) => exercise.primaryMuscles.some((muscle) => ['quads', 'hamstrings', 'glutes', 'calves'].includes(muscle)));
+  const upper = strength.filter((exercise) => exercise.primaryMuscles.some((muscle) => ['chest', 'shoulders', 'triceps', 'back', 'biceps', 'forearms'].includes(muscle)));
 
-  return Array.from({ length: days }, (_, index) => {
-    const pool = days <= 3 ? strength : pools[index % pools.length];
-    const chosen = rotate(pool, index).slice(0, Math.min(6, pool.length));
+  const safeStrength = strength.length ? strength : exercises;
+  const safePush = push.length ? push : safeStrength;
+  const safePull = pull.length ? pull : safeStrength;
+  const safeLower = lower.length ? lower : safeStrength;
+  const safeUpper = upper.length ? upper : safeStrength;
+
+  const plan = splitPlan(days, {
+    strength: safeStrength,
+    push: safePush,
+    pull: safePull,
+    lower: safeLower,
+    upper: safeUpper,
+  });
+  const repRange = goal === 'strength' ? [3, 6] : goal === 'hypertrophy' ? [6, 12] : [8, 15];
+  const targetRir = 2;
+  const targetSets = goal === 'strength' ? 4 : 3;
+
+  return plan.map((dayPlan, index) => {
+    const chosen = rotate(dayPlan.pool, dayPlan.rotation).slice(0, Math.min(6, dayPlan.pool.length));
+    const timestamp = nowIso();
     return {
       id: id('template'),
-      name: names[index] ?? `Entreno ${index + 1}`,
+      name: dayPlan.name,
       days: [index],
       exercises: chosen.map((exercise) => ({
         exerciseId: exercise.id,
@@ -141,8 +154,8 @@ export function buildRoutine(goal: Goal, daysPerWeek: number, exercises: Exercis
         targetRir,
         restSeconds: goal === 'strength' ? 180 : 120,
       })),
-      createdAt: nowIso(),
-      updatedAt: nowIso(),
+      createdAt: timestamp,
+      updatedAt: timestamp,
     };
   });
 }
@@ -194,6 +207,61 @@ export function workoutsThisWeek(sessions: WorkoutSession[], reference = new Dat
   start.setDate(start.getDate() - day);
   start.setHours(0, 0, 0, 0);
   return sessions.filter((session) => session.finishedAt && new Date(session.finishedAt) >= start).length;
+}
+
+type RoutinePools = {
+  strength: Exercise[];
+  push: Exercise[];
+  pull: Exercise[];
+  lower: Exercise[];
+  upper: Exercise[];
+};
+
+type RoutineDay = {
+  name: string;
+  pool: Exercise[];
+  rotation: number;
+};
+
+function splitPlan(days: number, pools: RoutinePools): RoutineDay[] {
+  if (days === 2) {
+    return [
+      { name: 'Full Body A', pool: pools.strength, rotation: 0 },
+      { name: 'Full Body B', pool: pools.strength, rotation: 3 },
+    ];
+  }
+  if (days === 3) {
+    return [
+      { name: 'Full Body A', pool: pools.strength, rotation: 0 },
+      { name: 'Full Body B', pool: pools.strength, rotation: 3 },
+      { name: 'Full Body C', pool: pools.strength, rotation: 6 },
+    ];
+  }
+  if (days === 4) {
+    return [
+      { name: 'Upper A', pool: pools.upper, rotation: 0 },
+      { name: 'Lower A', pool: pools.lower, rotation: 0 },
+      { name: 'Upper B', pool: pools.upper, rotation: 3 },
+      { name: 'Lower B', pool: pools.lower, rotation: 3 },
+    ];
+  }
+  if (days === 5) {
+    return [
+      { name: 'Push', pool: pools.push, rotation: 0 },
+      { name: 'Pull', pool: pools.pull, rotation: 0 },
+      { name: 'Legs', pool: pools.lower, rotation: 0 },
+      { name: 'Upper', pool: pools.upper, rotation: 2 },
+      { name: 'Lower', pool: pools.lower, rotation: 2 },
+    ];
+  }
+  return [
+    { name: 'Push A', pool: pools.push, rotation: 0 },
+    { name: 'Pull A', pool: pools.pull, rotation: 0 },
+    { name: 'Legs A', pool: pools.lower, rotation: 0 },
+    { name: 'Push B', pool: pools.push, rotation: 3 },
+    { name: 'Pull B', pool: pools.pull, rotation: 3 },
+    { name: 'Legs B', pool: pools.lower, rotation: 3 },
+  ];
 }
 
 function rotate<T>(items: T[], offset: number): T[] {
