@@ -1,0 +1,121 @@
+name: FitAI Pro 3 CI
+
+on:
+  push:
+    branches:
+      - feat/fitai-pro-3.0-local-first-pwa
+    paths:
+      - 'apps/fitai-pro/**'
+      - '.github/workflows/fitai-pro-3-ci.yml'
+  pull_request:
+    paths:
+      - 'apps/fitai-pro/**'
+      - '.github/workflows/fitai-pro-3-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: apps/fitai-pro
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Unit tests
+        run: npm test
+
+      - name: TypeScript strict check
+        run: npm run typecheck
+
+      - name: Build static PWA
+        run: npm run build
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser E2E mobile and desktop
+        run: npm run e2e
+
+      - name: Generate Capacitor Android shell
+        run: |
+          rm -rf android
+          npx cap add android
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('android/variables.gradle')
+          text = path.read_text()
+          import re
+          text = re.sub(r'minSdkVersion\s*=\s*\d+', 'minSdkVersion = 26', text)
+          path.write_text(text)
+          PY
+          npx cap sync android
+
+      - name: Assemble Android debug APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace assembleDebug
+
+      - name: Record APK checksum
+        run: |
+          sha256sum android/app/build/outputs/apk/debug/app-debug.apk | tee FITAI_PRO_3_APK_SHA256.txt
+
+      - name: Enable KVM for emulator
+        run: |
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+
+      - name: Android emulator launch smoke
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: |
+            cd apps/fitai-pro
+            adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+            adb shell am force-stop com.adelvis.fitai.pro || true
+            adb shell monkey -p com.adelvis.fitai.pro -c android.intent.category.LAUNCHER 1
+            sleep 6
+            adb shell pidof com.adelvis.fitai.pro
+            adb exec-out screencap -p > fitai-pro-3-emulator.png
+
+      - name: Upload APK and PWA
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FitAI-Pro-3-build
+          path: |
+            apps/fitai-pro/android/app/build/outputs/apk/debug/app-debug.apk
+            apps/fitai-pro/FITAI_PRO_3_APK_SHA256.txt
+            apps/fitai-pro/out/
+            apps/fitai-pro/fitai-pro-3-emulator.png
+            apps/fitai-pro/playwright-report/
+          if-no-files-found: warn
+          retention-days: 30
