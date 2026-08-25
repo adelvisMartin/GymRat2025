@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { detectPersonalRecords, estimatedOneRepMax, nextLoadKg, nutritionTotals, platePlan, sessionVolume } from '../src/lib/domain';
+import { EXERCISE_CATALOG } from '../src/lib/catalog';
+import { buildRoutine, detectPersonalRecords, estimatedOneRepMax, nextLoadKg, nutritionTotals, platePlan, sessionVolume } from '../src/lib/domain';
 import type { WorkoutSession } from '../src/lib/types';
 
 describe('training engine', () => {
-  it('estimates one rep max with Epley', () => {
+  it('estimates one rep max with Epley only in the supported 1-12 rep range', () => {
     expect(estimatedOneRepMax(100, 5)).toBe(116.7);
     expect(estimatedOneRepMax(100, 1)).toBe(100);
+    expect(estimatedOneRepMax(100, 12)).toBe(140);
+    expect(estimatedOneRepMax(100, 13)).toBe(0);
+    expect(estimatedOneRepMax(100, 25)).toBe(0);
   });
 
   it('progresses load only when reps and RIR support it', () => {
@@ -16,6 +20,24 @@ describe('training engine', () => {
 
   it('calculates per-side plates after subtracting the bar', () => {
     expect(platePlan(100, 20, [20, 10, 5, 2.5])).toEqual([20, 20]);
+  });
+
+  it('keeps a 5-day Lower routine restricted to lower-body exercises', () => {
+    const routine = buildRoutine('hypertrophy', 5, EXERCISE_CATALOG);
+    expect(routine.map((day) => day.name)).toEqual(['Push', 'Pull', 'Legs', 'Upper', 'Lower']);
+
+    const lower = routine[4];
+    expect(lower.exercises.length).toBeGreaterThan(0);
+    for (const plan of lower.exercises) {
+      const exercise = EXERCISE_CATALOG.find((candidate) => candidate.id === plan.exerciseId);
+      expect(exercise).toBeDefined();
+      expect(exercise?.primaryMuscles.some((muscle) => ['quads', 'hamstrings', 'glutes', 'calves'].includes(muscle))).toBe(true);
+    }
+  });
+
+  it('uses explicit upper/lower semantics for a 4-day program', () => {
+    const routine = buildRoutine('strength', 4, EXERCISE_CATALOG);
+    expect(routine.map((day) => day.name)).toEqual(['Upper A', 'Lower A', 'Upper B', 'Lower B']);
   });
 
   it('detects new personal records after a finished session', () => {
