@@ -10,9 +10,9 @@ export async function encryptText(plainText: string, pin: string): Promise<Vault
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const key = await deriveKey(pin, salt, ITERATIONS);
   const encrypted = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
+    { name: 'AES-GCM', iv: toArrayBuffer(iv) },
     key,
-    encoder.encode(plainText),
+    toArrayBuffer(encoder.encode(plainText)),
   );
 
   return {
@@ -39,7 +39,11 @@ export async function decryptText(envelope: VaultEnvelope, pin: string): Promise
   const cipherText = base64ToBytes(envelope.cipherText);
   const key = await deriveKey(pin, salt, envelope.iterations);
   try {
-    const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, cipherText);
+    const decrypted = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: toArrayBuffer(iv) },
+      key,
+      toArrayBuffer(cipherText),
+    );
     return decoder.decode(decrypted);
   } catch {
     throw new Error('PIN incorrecto o datos locales dañados.');
@@ -49,13 +53,13 @@ export async function decryptText(envelope: VaultEnvelope, pin: string): Promise
 async function deriveKey(pin: string, salt: Uint8Array, iterations: number): Promise<CryptoKey> {
   const baseKey = await crypto.subtle.importKey(
     'raw',
-    encoder.encode(pin),
+    toArrayBuffer(encoder.encode(pin)),
     { name: 'PBKDF2' },
     false,
     ['deriveKey'],
   );
   return crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt, iterations, hash: 'SHA-256' },
+    { name: 'PBKDF2', salt: toArrayBuffer(salt), iterations, hash: 'SHA-256' },
     baseKey,
     { name: 'AES-GCM', length: 256 },
     false,
@@ -86,4 +90,10 @@ function base64ToBytes(value: string): Uint8Array {
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
   return bytes;
+}
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
 }
