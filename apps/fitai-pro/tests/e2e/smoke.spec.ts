@@ -32,6 +32,6 @@ test('setup → navigate → generate routine → start workout → register set
   await page.getByRole('button', { name: 'Entrar' }).click();
   await expect(page.getByText(/Tu objetivo es hipertrofia/i)).toBeVisible();
 
-  await page.getByRole('button', { name: 'Progreso' }).click();
+  await page.getByRole('button', { name: /^↗ Progreso$/ }).click();
   await expect(page.getByText('Volumen por sesión')).toBeVisible();
 });
