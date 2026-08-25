@@ -61,7 +61,9 @@ export async function startStepTracking(onSteps: (steps: number) => void): Promi
   }
 
   const listener = await CapacitorPedometer.addListener('measurement', (measurement) => {
-    const value = Math.max(0, Math.round(measurement.numberOfSteps));
+    const rawSteps = measurement.numberOfSteps;
+    if (!Number.isFinite(rawSteps)) return;
+    const value = Math.max(0, Math.round(Number(rawSteps)));
     onSteps(value);
   });
   await CapacitorPedometer.startMeasurementUpdates();
