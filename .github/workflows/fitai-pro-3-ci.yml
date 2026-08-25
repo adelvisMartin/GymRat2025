@@ -16,34 +16,53 @@ on:
 permissions:
   contents: read
 
+env:
+  NEXT_TELEMETRY_DISABLED: '1'
+
 jobs:
   build-test-android:
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: apps/fitai-pro
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Set up Node 24
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
 
       - name: Set up Java 21
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: '21'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
 
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npm install --no-fund
+
+      - name: Runtime dependency audit baseline
+        continue-on-error: true
+        run: |
+          set +e
+          npm audit --omit=dev --audit-level=high 2>&1 | tee npm-audit.txt
+          exit 0
+
+      - name: React Doctor full audit baseline
+        continue-on-error: true
+        run: |
+          set +e
+          CI=1 npx --yes react-doctor@latest --verbose 2>&1 | tee react-doctor.txt
+          exit 0
 
       - name: Unit tests
         run: npm test
@@ -60,6 +79,23 @@ jobs:
       - name: Browser E2E mobile and desktop
         run: npm run e2e
 
+      - name: AccessLint WCAG baseline
+        continue-on-error: true
+        run: |
+          set +e
+          npm run serve:static > /tmp/fitai-serve.log 2>&1 &
+          SERVE_PID=$!
+          for i in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:3000/ > /dev/null; then break; fi
+            sleep 1
+          done
+          npx -y @accesslint/chrome ensure
+          npx -y @accesslint/cli scan http://127.0.0.1:3000 --format text 2>&1 | tee accesslint.txt
+          ACCESSLINT_EXIT=${PIPESTATUS[0]}
+          kill "$SERVE_PID" 2>/dev/null || true
+          echo "AccessLint baseline exit code: $ACCESSLINT_EXIT"
+          exit 0
+
       - name: Generate Capacitor Android shell
         run: |
           rm -rf android
@@ -74,10 +110,15 @@ jobs:
           PY
           npx cap sync android
 
-      - name: Assemble Android debug APK
+      - name: Android lint
         run: |
           cd android
           chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace lintDebug
+
+      - name: Assemble Android debug APK
+        run: |
+          cd android
           ./gradlew --no-daemon --stacktrace assembleDebug
 
       - name: Record APK checksum
@@ -89,7 +130,7 @@ jobs:
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
 
       - name: Android emulator launch smoke
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           api-level: 35
           target: google_apis
@@ -98,17 +139,19 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
-            cd apps/fitai-pro
-            adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+            APK="$GITHUB_WORKSPACE/apps/fitai-pro/android/app/build/outputs/apk/debug/app-debug.apk"
+            SCREENSHOT="$GITHUB_WORKSPACE/apps/fitai-pro/fitai-pro-3-emulator.png"
+            test -f "$APK"
+            adb install -r "$APK"
             adb shell am force-stop com.adelvis.fitai.pro || true
             adb shell monkey -p com.adelvis.fitai.pro -c android.intent.category.LAUNCHER 1
             sleep 6
             adb shell pidof com.adelvis.fitai.pro
-            adb exec-out screencap -p > fitai-pro-3-emulator.png
+            adb exec-out screencap -p > "$SCREENSHOT"
 
-      - name: Upload APK and PWA
+      - name: Upload APK PWA and audit evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: FitAI-Pro-3-build
           path: |
@@ -117,5 +160,10 @@ jobs:
             apps/fitai-pro/out/
             apps/fitai-pro/fitai-pro-3-emulator.png
             apps/fitai-pro/playwright-report/
+            apps/fitai-pro/npm-audit.txt
+            apps/fitai-pro/react-doctor.txt
+            apps/fitai-pro/accesslint.txt
+            apps/fitai-pro/android/app/build/reports/lint-results-debug.html
+            apps/fitai-pro/android/app/build/reports/lint-results-debug.txt
           if-no-files-found: warn
           retention-days: 30
