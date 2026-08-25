@@ -2,7 +2,9 @@ param(
     [switch]$SkipHallmark,
     [switch]$SkipImpeccable,
     [switch]$SkipEmil,
-    [switch]$SkipTaste
+    [switch]$SkipTaste,
+    [switch]$SkipCapawesome,
+    [switch]$SkipCapgo
 )
 
 $ErrorActionPreference = 'Stop'
@@ -29,8 +31,8 @@ if (-not (Get-Command npx -ErrorAction SilentlyContinue)) {
     throw 'npx is required. Install a supported Node.js/npm distribution first.'
 }
 
-Write-Host 'FitAI Pro — installing external design/interaction skills for the current project.' -ForegroundColor Green
-Write-Host 'Run this script from the repository root. Repository-local FitAI skills are already versioned under .agents/skills/.'
+Write-Host 'FitAI Pro 3 — installing advisory design, interaction and Capacitor skills.' -ForegroundColor Green
+Write-Host 'Run this script from the repository root. Binding FitAI skills are already versioned under .agents/skills/.'
 
 if (-not $SkipEmil) {
     Invoke-Step 'Emil Kowalski design-engineering skills' {
@@ -45,7 +47,7 @@ if (-not $SkipImpeccable) {
 }
 
 if (-not $SkipHallmark) {
-    Invoke-Step 'Hallmark anti-AI-slop design skill' {
+    Invoke-Step 'Hallmark anti-generic design skill' {
         npx --yes skills add nutlope/hallmark
     }
 }
@@ -56,6 +58,19 @@ if (-not $SkipTaste) {
     }
 }
 
+if (-not $SkipCapawesome) {
+    Invoke-Step 'Capawesome Capacitor plugin skill' {
+        npx --yes skills add capawesome-team/skills --skill capacitor-plugins
+    }
+}
+
+if (-not $SkipCapgo) {
+    Invoke-Step 'Capgo Capacitor plugin skill' {
+        npx --yes skills add https://github.com/cap-go/capacitor-skills --skill capacitor-plugins
+    }
+}
+
 Write-Host "`nInstalled requested skills." -ForegroundColor Green
 Write-Host 'Restart/reload Codex or the active coding harness if newly installed skills are not detected immediately.'
-Write-Host 'Use one primary design skill per implementation pass; use a second skill only as an audit to avoid conflicting redesign instructions.'
+Write-Host 'The local AGENTS.md and .agents/skills rules override advisory external skills.'
+Write-Host 'Use one primary design skill per implementation pass; use another only as an audit.'
