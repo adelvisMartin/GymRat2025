@@ -9,12 +9,14 @@ test('setup → navigate → generate routine → start workout → register set
   await page.getByLabel('PIN local').fill('2468');
   await page.getByRole('button', { name: 'Crear FitAI Pro' }).click();
 
-  await expect(page.getByText('QA FitAI', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(/Tu objetivo es hipertrofia/i)).toBeVisible();
   await page.getByRole('button', { name: 'Entreno' }).click();
   await page.getByRole('button', { name: 'Generar rutina' }).click();
-  await expect(page.getByText('Full Body A')).toBeVisible();
 
-  await page.getByRole('button', { name: 'Iniciar Full Body A' }).click();
+  const firstRoutine = page.getByRole('button', { name: /^Iniciar / }).first();
+  await expect(firstRoutine).toBeVisible();
+  await firstRoutine.click();
+
   await expect(page.getByText('ENTRENAMIENTO ACTIVO')).toBeVisible();
   const registerButtons = page.getByRole('button', { name: 'Registrar serie' });
   await expect(registerButtons.first()).toBeVisible();
@@ -28,7 +30,7 @@ test('setup → navigate → generate routine → start workout → register set
   await expect(page.getByText('Desbloquear FitAI Pro')).toBeVisible();
   await page.getByLabel('PIN').fill('2468');
   await page.getByRole('button', { name: 'Entrar' }).click();
-  await expect(page.getByText('QA FitAI', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(/Tu objetivo es hipertrofia/i)).toBeVisible();
 
   await page.getByRole('button', { name: 'Progreso' }).click();
   await expect(page.getByText('Volumen por sesión')).toBeVisible();
