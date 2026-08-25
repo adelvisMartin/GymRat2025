@@ -1,0 +1,20 @@
+{
+  "name": "FitAI Pro",
+  "short_name": "FitAI Pro",
+  "description": "Entrenamiento, nutrición, progreso y coaching con datos locales cifrados.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#090b0f",
+  "theme_color": "#0a0c10",
+  "categories": ["fitness", "health", "productivity"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
