@@ -1,0 +1,43 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.adelvis.fitai'
+    compileSdk 36
+    defaultConfig {
+        applicationId "com.adelvis.fitai.pro"
+        minSdk 26
+        targetSdk 36
+        versionCode 281
+        versionName "2.8.1"
+        testInstrumentationRunner "android.test.InstrumentationTestRunner"
+    }
+    flavorDimensions += "edition"
+    productFlavors { pro { dimension "edition" } }
+    buildTypes {
+        debug { applicationIdSuffix ".debug"; versionNameSuffix "-dev"; debuggable true }
+        release {
+            minifyEnabled true
+            shrinkResources true
+            debuggable false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    lint {
+        abortOnError true
+        checkReleaseBuilds true
+        warningsAsErrors false
+        disable += ['TypographyFractions', 'TypographyQuotes']
+    }
+    packaging { resources { excludes += ['/META-INF/{AL2.0,LGPL2.1}'] } }
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20240303'
+}
