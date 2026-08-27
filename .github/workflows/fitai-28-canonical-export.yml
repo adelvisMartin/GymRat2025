@@ -1,0 +1,47 @@
+name: FitAI 2.8 Canonical Source Export
+
+on:
+  push:
+    branches:
+      - recovery/fitai-2.8-canonical-export
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Reconstruct and verify exact source ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="$RUNNER_TEMP/FitAI-Pro-2.8-ProductionCandidate-Android-Source.zip"
+          EXPECTED_SHA="1dee386bbc3e1a5204fd81e2f592b926ff81c555b2fcbf135bd3cd6c68953555"
+          PARTS=(source/fitai28/chunks/fitai28.zip.b64.{00..12})
+          PARTS+=(source/fitai28/chunks/fitai28.zip.b64.13a)
+          PARTS+=(source/fitai28/chunks/fitai28.zip.b64.13b)
+          for part in "${PARTS[@]}"; do
+            test -s "$part"
+          done
+          cat "${PARTS[@]}" | base64 --decode > "$ZIP"
+          ACTUAL_SHA="$(sha256sum "$ZIP" | awk '{print $1}')"
+          test "$ACTUAL_SHA" = "$EXPECTED_SHA"
+          unzip -tq "$ZIP"
+          echo "$ACTUAL_SHA  FitAI-Pro-2.8-ProductionCandidate-Android-Source.zip" > "$RUNNER_TEMP/FitAI-Pro-2.8-ProductionCandidate-Android-Source.zip.sha256"
+          echo "ZIP=$ZIP" >> "$GITHUB_ENV"
+
+      - name: Upload canonical source ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: FitAI-Pro-2.8-Canonical-Source-${{ github.sha }}
+          path: |
+            ${{ env.ZIP }}
+            ${{ runner.temp }}/FitAI-Pro-2.8-ProductionCandidate-Android-Source.zip.sha256
+          if-no-files-found: error
+          retention-days: 30
