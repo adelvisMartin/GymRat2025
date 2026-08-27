@@ -1,0 +1,133 @@
+name: FitAI 2.8.1 Runtime QA Evidence
+
+on:
+  push:
+    branches:
+      - qa/fitai-2.8.1-runtime-evidence
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fitai-281-runtime-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION: "17"
+  GRADLE_VERSION: "9.1.0"
+
+jobs:
+  core:
+    name: clean-test-lint-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK 36
+        run: sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: ${{ env.GRADLE_VERSION }}
+      - name: Materialize exact hardened source
+        run: bash source/fitai281/materialize.sh
+      - name: Clean, test, lint and assemble release/debug
+        run: |
+          cd "$FITAI_SOURCE_ROOT"
+          gradle --no-daemon --stacktrace clean test lint assembleRelease assembleProDebug
+      - name: Capture APK metadata and SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/fitai281/evidence/core
+          mapfile -t apks < <(find "$FITAI_SOURCE_ROOT/app/build/outputs/apk" -type f -name '*.apk' | sort)
+          test ${#apks[@]} -gt 0
+          for apk in "${apks[@]}"; do
+            python3 - "$apk" <<'PY' >> build/fitai281/evidence/core/apk-sha256.txt
+import hashlib,pathlib,sys
+p=pathlib.Path(sys.argv[1]); print(hashlib.sha256(p.read_bytes()).hexdigest(), p)
+PY
+            "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk" | head -n 6 >> build/fitai281/evidence/core/apk-badging.txt
+          done
+          printf 'bridge_commit=%s\nsource_sha256=%s\n' "$GITHUB_SHA" "$FITAI_SOURCE_SHA256" > build/fitai281/evidence/core/provenance.txt
+      - name: Upload core evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FitAI-2.8.1-core-${{ github.sha }}
+          path: |
+            build/fitai281/provenance.txt
+            build/fitai281/FitAI-Pro-2.8.1-QA-Hardened-Android-Source.zip
+            build/fitai281/evidence/core/
+            build/fitai281/extracted/**/build/reports/
+            build/fitai281/extracted/**/build/test-results/
+            build/fitai281/extracted/**/build/outputs/apk/
+          if-no-files-found: warn
+          retention-days: 30
+
+  instrumentation:
+    name: api-${{ matrix.api }}-${{ matrix.form-factor }}
+    needs: core
+    runs-on: macos-14
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - api: 33
+            form-factor: compact
+            size: 360x800
+            density: 420
+          - api: 34
+            form-factor: normal
+            size: 412x915
+            density: 440
+          - api: 35
+            form-factor: tablet
+            size: 1280x800
+            density: 240
+          - api: 36
+            form-factor: normal
+            size: 412x915
+            density: 440
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK 36
+        run: sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: ${{ env.GRADLE_VERSION }}
+      - name: Materialize exact hardened source
+        run: bash source/fitai281/materialize.sh
+      - name: Android ${{ matrix.api }} characterization + negatives
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        env:
+          FITAI_ANDROID_API: ${{ matrix.api }}
+        with:
+          api-level: ${{ matrix.api }}
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: bash source/fitai281/run-instrumentation.sh "${{ matrix.size }}" "${{ matrix.density }}"
+      - name: Upload emulator evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FitAI-2.8.1-api-${{ matrix.api }}-${{ matrix.form-factor }}-${{ github.sha }}
+          path: |
+            build/fitai281/evidence/api-${{ matrix.api }}/
+            build/fitai281/extracted/**/build/reports/androidTests/
+            build/fitai281/extracted/**/build/outputs/androidTest-results/
+          if-no-files-found: warn
+          retention-days: 30
