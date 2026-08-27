@@ -1,6 +1,7 @@
 package com.adelvis.fitai;
 
 import android.app.Activity;
+import android.app.Instrumentation;
 import android.content.Context;
 import android.content.Intent;
 import android.os.ParcelFileDescriptor;
@@ -163,7 +164,7 @@ public final class CoreFlowInstrumentedTest extends android.test.Instrumentation
                 in.close();
             }
         } catch (Exception ignored) {
-            // Best-effort shell setup varies by emulator API; local-core assertions remain mandatory.
+            // The negative condition is best-effort across API levels; local-core assertions remain mandatory.
         } finally {
             try { if (pfd != null) pfd.close(); } catch (Exception ignored) { }
         }
