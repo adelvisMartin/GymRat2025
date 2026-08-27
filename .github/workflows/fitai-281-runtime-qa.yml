@@ -71,7 +71,7 @@ PY
           retention-days: 30
 
   instrumentation:
-    name: api-${{ matrix.api }}-${{ matrix.form-factor }}
+    name: api-${{ matrix.api }}-${{ matrix.form_factor }}
     needs: core
     runs-on: macos-14
     timeout-minutes: 75
@@ -80,19 +80,19 @@ PY
       matrix:
         include:
           - api: 33
-            form-factor: compact
+            form_factor: compact
             size: 360x800
             density: 420
           - api: 34
-            form-factor: normal
+            form_factor: normal
             size: 412x915
             density: 440
           - api: 35
-            form-factor: tablet
+            form_factor: tablet
             size: 1280x800
             density: 240
           - api: 36
-            form-factor: normal
+            form_factor: normal
             size: 412x915
             density: 440
     steps:
@@ -124,7 +124,7 @@ PY
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: FitAI-2.8.1-api-${{ matrix.api }}-${{ matrix.form-factor }}-${{ github.sha }}
+          name: FitAI-2.8.1-api-${{ matrix.api }}-${{ matrix.form_factor }}-${{ github.sha }}
           path: |
             build/fitai281/evidence/api-${{ matrix.api }}/
             build/fitai281/extracted/**/build/reports/androidTests/
