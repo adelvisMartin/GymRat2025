@@ -48,10 +48,7 @@ jobs:
           mapfile -t apks < <(find "$FITAI_SOURCE_ROOT/app/build/outputs/apk" -type f -name '*.apk' | sort)
           test ${#apks[@]} -gt 0
           for apk in "${apks[@]}"; do
-            python3 - "$apk" <<'PY' >> build/fitai281/evidence/core/apk-sha256.txt
-import hashlib,pathlib,sys
-p=pathlib.Path(sys.argv[1]); print(hashlib.sha256(p.read_bytes()).hexdigest(), p)
-PY
+            sha256sum "$apk" >> build/fitai281/evidence/core/apk-sha256.txt
             "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk" | head -n 6 >> build/fitai281/evidence/core/apk-badging.txt
           done
           printf 'bridge_commit=%s\nsource_sha256=%s\n' "$GITHUB_SHA" "$FITAI_SOURCE_SHA256" > build/fitai281/evidence/core/provenance.txt
