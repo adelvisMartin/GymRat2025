@@ -97,3 +97,7 @@ External design skills may be installed with `scripts/install-agent-skills.ps1`.
 - `PRODUCTION GO`: all mandatory gates in `docs/QA_RELEASE_GATES.md` pass with no unresolved P0/P1 defect.
 
 Never collapse these into a single vague “tested” status.
+
+
+## SIC Engineering
+Read docs/sic/ENGINEERING.md and use sic-orchestrator, sic-domain-review and sic-qa-release; preserve existing project rules.
